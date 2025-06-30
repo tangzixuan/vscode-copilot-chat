@@ -7,6 +7,7 @@ import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, User
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { StringTextDocumentWithLanguageId } from '../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -19,6 +20,7 @@ import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtr
 import { getDefaultLanguage } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -32,7 +34,6 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { guessIndentation, normalizeIndentation } from '../../prompt/node/indentationGuesser';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/agentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -46,8 +47,6 @@ import { ActionType, Commit, DiffError, FileChange, InvalidContextError, Invalid
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
-import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export const applyPatchWithNotebookSupportDescription: vscode.LanguageModelToolInformation = {
 	name: ToolName.ApplyPatch,
@@ -126,36 +125,10 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return trailingEmptyLines;
 	}
 
-	/**
-	 * Normalize the indentation of the content to match the original document's style
-	 * @param document The original document
-	 * @param content The content to normalize
-	 * @returns The normalized content
-	 */
-	private normalizeIndentationStyle(document: vscode.TextDocument, content: string): string {
-		// Detect the indentation style of the original document
-		const indentInfo = guessIndentation(document, 4, true);
-
-		// Split into lines, normalize each line, and then join back
-		const lines = content.split('\n');
-		const normalizedLines = lines.map(line => {
-			// Only process lines that have indentation
-			if (line.match(/^\s+/)) {
-				return normalizeIndentation(line, indentInfo.tabSize, indentInfo.insertSpaces);
-			}
-			return line;
-		});
-
-		return normalizedLines.join('\n');
-	}
-
 	private async generateUpdateTextDocumentEdit(file: string, change: FileChange, workspaceEdit: WorkspaceEdit) {
 		const uri = resolveToolInputPath(file, this.promptPathRepresentationService);
 		const textDocument = await this.workspaceService.openTextDocument(uri);
-		let newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
-
-		// Normalize the indentation to match the style of the original file
-		newContent = this.normalizeIndentationStyle(textDocument, newContent);
+		const newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
 
 		const lines = newContent?.split('\n') ?? [];
 		let path = uri;
