@@ -59,9 +59,19 @@ export class InlineEditModel extends Disposable {
 	}
 }
 
+class LastChange {
+	public lastEditedTimestamp: number;
+	public lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */>;
+
+	constructor() {
+		this.lastEditedTimestamp = Date.now();
+		this.lineNumberTriggers = new Map();
+	}
+}
+
 class InlineEditTriggerer extends Disposable {
 
-	private readonly docToLastChangeMap = new Map<DocumentId, { lastEditedTimestamp: number; lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */> }>();
+	private readonly docToLastChangeMap = new Map<DocumentId, LastChange>();
 
 	private readonly _tracer: ITracer;
 
@@ -107,7 +117,7 @@ class InlineEditTriggerer extends Disposable {
 				return;
 			}
 
-			this.docToLastChangeMap.set(doc.id, { lastEditedTimestamp: Date.now(), lineNumberTriggers: new Map() });
+			this.docToLastChangeMap.set(doc.id, new LastChange());
 
 			tracer.returns('setting last edited timestamp');
 		})));
