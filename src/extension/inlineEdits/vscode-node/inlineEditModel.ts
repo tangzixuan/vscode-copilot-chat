@@ -197,7 +197,12 @@ class InlineEditTriggerer extends Disposable {
 
 			mostRecentChange.lineNumberTriggers.set(selectionLine, now);
 			tracer.returns('triggering inline edit');
-			this.onChange.trigger(undefined);
+
+			this._triggerInlineEdit();
 		})));
+	}
+
+	private _triggerInlineEdit() {
+		this.onChange.trigger(undefined);
 	}
 }
